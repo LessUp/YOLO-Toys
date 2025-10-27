@@ -1,0 +1,26 @@
+version: '3.9'
+services:
+  app:
+    build: .
+    image: vision-det:latest
+    container_name: vision-det
+    environment:
+      - MODEL_NAME=${MODEL_NAME:-yolov8n.pt}
+      - CONF_THRESHOLD=${CONF_THRESHOLD:-0.3}
+      - IOU_THRESHOLD=${IOU_THRESHOLD:-0.45}
+      - MAX_DET=${MAX_DET:-300}
+      - DEVICE=${DEVICE:-}
+      - SKIP_WARMUP=${SKIP_WARMUP:-}
+      - ALLOW_ORIGINS=${ALLOW_ORIGINS:-*}
+      - MAX_UPLOAD_MB=${MAX_UPLOAD_MB:-10}
+      - MAX_CONCURRENCY=${MAX_CONCURRENCY:-4}
+    ports:
+      - "8000:8000"
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    # volumes:
+    #   - ./:/app:ro
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - capabilities: [gpu]

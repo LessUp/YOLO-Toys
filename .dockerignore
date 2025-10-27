@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.log
+
+# Env
+.venv/
+.env
+
+# VCS
+.git/
+.gitignore
+
+# OS
+.DS_Store
+
+# Ultralytics outputs
+runs/

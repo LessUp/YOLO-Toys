@@ -1,0 +1,6 @@
+pytest>=7.4
+httpx>=0.25
+black>=24.0
+ruff>=0.6.0
+isort>=5.13.0
+pre-commit>=3.7.0

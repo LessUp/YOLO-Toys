@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>实时物体识别</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="container">
+    <h1>实时物体识别</h1>
+    <div class="controls">
+      <button id="start">开始</button>
+      <button id="stop" disabled>停止</button>
+      <label>服务地址:
+        <input id="server" type="text" placeholder="http://localhost:8000" />
+      </label>
+      <label><input id="useWs" type="checkbox" checked /> WebSocket</label>
+      <label>模型:
+        <select id="model"></select>
+        <input id="customModel" type="text" placeholder="(可选) 自定义模型名或路径" />
+      </label>
+      <label>发送帧率: 
+        <select id="fps">
+          <option value="3">3</option>
+          <option value="5" selected>5</option>
+          <option value="10">10</option>
+        </select> fps
+      </label>
+      <label>发送宽度:
+        <select id="sendSize">
+          <option value="320">320</option>
+          <option value="480">480</option>
+          <option value="640" selected>640</option>
+        </select> px
+      </label>
+      <label>置信度:
+        <input id="conf" type="number" min="0.05" max="0.95" step="0.05" value="0.3" />
+      </label>
+      <label>IoU:
+        <input id="iou" type="number" min="0.1" max="0.95" step="0.05" value="0.45" />
+      </label>
+      <label>最大检测:
+        <input id="maxDet" type="number" min="50" max="1000" step="10" value="300" />
+      </label>
+      <label>设备:
+        <select id="device">
+          <option value="auto" selected>auto</option>
+          <option value="cpu">cpu</option>
+          <option value="mps">mps</option>
+          <option value="cuda:0">cuda:0</option>
+        </select>
+      </label>
+      <label>质量:
+        <select id="quality">
+          <option value="0.6">0.6</option>
+          <option value="0.8" selected>0.8</option>
+          <option value="0.9">0.9</option>
+        </select>
+      </label>
+      <label>推理尺寸:
+        <input id="imgsz" type="number" min="160" step="32" placeholder="(可选) 如 640" />
+      </label>
+      <label><input id="half" type="checkbox" /> FP16</label>
+      <label><input id="showBoxes" type="checkbox" checked /> 框</label>
+      <label><input id="showLabels" type="checkbox" checked /> 标签</label>
+      <label><input id="showMasks" type="checkbox" checked /> 掩膜</label>
+      <label>掩膜透明度:
+        <input id="maskAlpha" type="range" min="0.05" max="0.9" step="0.05" value="0.2" />
+      </label>
+      <label><input id="showKeypoints" type="checkbox" checked /> 关键点</label>
+      <label><input id="showSkeleton" type="checkbox" checked /> 骨架</label>
+    </div>
+    <div class="stage">
+      <canvas id="canvas"></canvas>
+    </div>
+    <div id="stats"></div>
+  </div>
+  <video id="video" autoplay playsinline muted style="display:none"></video>
+  <script src="app.js"></script>
+</body>
+</html>
