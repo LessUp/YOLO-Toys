@@ -175,11 +175,24 @@ fpsSelect.addEventListener('change', updateFps);
 updateFps();
 
 async function setupCamera() {
-  const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
-  video.srcObject = stream;
-  await video.play();
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
+  try {
+    let constraints = { video: { facingMode: 'environment' }, audio: false };
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia(constraints);
+    } catch (err) {
+      constraints = { video: true, audio: false };
+      stream = await navigator.mediaDevices.getUserMedia(constraints);
+    }
+    video.srcObject = stream;
+    await video.play();
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    clearPermissionMessage();
+  } catch (err) {
+    handleCameraError(err);
+    throw err;
+  }
 }
 
 function draw() {
@@ -385,6 +398,9 @@ function closeWebSocket() {
 }
 
 startBtn.addEventListener('click', async () => {
+  if (!preflightCameraCheck()) {
+    return;
+  }
   startBtn.disabled = true;
   try {
     await initModels();
@@ -438,3 +454,5 @@ async function initModels() {
 
 // Apply saved settings at load time
 applySettings();
+monitorCameraPermission();
+preflightCameraCheck();
