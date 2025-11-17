@@ -10,8 +10,8 @@ except Exception:  # pragma: no cover
     torch = None  # type: ignore
 
 
-DEFAULT_MODEL = os.getenv("MODEL_NAME", "yolov8n.pt")
-CONF = float(os.getenv("CONF_THRESHOLD", "0.3"))
+DEFAULT_MODEL = os.getenv("MODEL_NAME", "yolov8s.pt")
+CONF = float(os.getenv("CONF_THRESHOLD", "0.25"))
 IOU = float(os.getenv("IOU_THRESHOLD", "0.45"))
 MAX_DET = int(os.getenv("MAX_DET", "300"))
 DEVICE_ENV = (os.getenv("DEVICE", "").strip() or None)
@@ -151,7 +151,7 @@ def runtime_info() -> Dict[str, Any]:
 
 def recommended_models() -> List[str]:
     return [
-        "yolov8n.pt",
-        "yolov8n-seg.pt",
-        "yolov8n-pose.pt",
+        "yolov8s.pt",
+        "yolov8s-seg.pt",
+        "yolov8s-pose.pt",
     ]
