@@ -23,6 +23,7 @@ const halfCb = document.getElementById('half');
 const maskAlphaInput = document.getElementById('maskAlpha');
 const showSkeletonCb = document.getElementById('showSkeleton');
 const useWsCb = document.getElementById('useWs');
+const permissionStatus = document.getElementById('permissionStatus');
 
 let running = false;
 let busy = false;
@@ -41,6 +42,79 @@ function loadSettings() {
 }
 function saveSettings(s) {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+}
+
+const NOTICE_PRIORITY = { info: 1, warning: 2, error: 3 };
+function updatePermissionMessage(message, level = 'info', force = false) {
+  if (!permissionStatus) return;
+  const currentLevel = permissionStatus.dataset.level || '';
+  if (!force && currentLevel && NOTICE_PRIORITY[currentLevel] > NOTICE_PRIORITY[level]) {
+    return;
+  }
+  permissionStatus.hidden = false;
+  permissionStatus.textContent = message;
+  permissionStatus.dataset.level = level;
+  permissionStatus.classList.remove('info', 'warning', 'error');
+  permissionStatus.classList.add(level);
+}
+function clearPermissionMessage() {
+  if (!permissionStatus) return;
+  permissionStatus.hidden = true;
+  permissionStatus.textContent = '';
+  delete permissionStatus.dataset.level;
+  permissionStatus.classList.remove('info', 'warning', 'error');
+}
+
+function isTrustedLocalhost() {
+  return ['localhost', '127.0.0.1'].includes(window.location.hostname);
+}
+
+function preflightCameraCheck() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    updatePermissionMessage('当前浏览器不支持摄像头 API（navigator.mediaDevices.getUserMedia），请使用最新版 Chrome/Edge/Firefox。', 'error', true);
+    return false;
+  }
+  if (!window.isSecureContext && !isTrustedLocalhost()) {
+    updatePermissionMessage('浏览器要求 HTTPS 或 localhost/127.0.0.1 才能访问摄像头。请改用安全地址，或在浏览器设置中将当前地址标记为安全。', 'warning', true);
+  } else if (permissionStatus && (permissionStatus.hidden || permissionStatus.dataset.level === 'info')) {
+    updatePermissionMessage('点击“开始”后浏览器会请求摄像头权限，请选择“允许”。', 'info');
+  }
+  return true;
+}
+
+async function monitorCameraPermission() {
+  if (!navigator.permissions?.query) {
+    return;
+  }
+  try {
+    const status = await navigator.permissions.query({ name: 'camera' });
+    applyPermissionState(status.state);
+    status.onchange = () => applyPermissionState(status.state);
+  } catch (e) {
+    // 某些浏览器（如 Safari）不支持 camera 权限查询，忽略错误
+  }
+}
+
+function applyPermissionState(state) {
+  if (state === 'granted') {
+    updatePermissionMessage('摄像头权限已授予，可直接点击“开始”进入推理。', 'info');
+  } else if (state === 'prompt') {
+    updatePermissionMessage('点击“开始”后浏览器会弹出权限提示，请选择“允许”以继续。', 'info');
+  } else if (state === 'denied') {
+    updatePermissionMessage('摄像头权限被拒绝，请在浏览器地址栏右侧的权限设置中允许访问后刷新页面。', 'error', true);
+  }
+}
+
+function handleCameraError(err) {
+  if (!err) return;
+  const errorName = err.name || '';
+  if (errorName === 'NotAllowedError' || errorName === 'SecurityError') {
+    updatePermissionMessage('摄像头权限被浏览器拒绝，请在浏览器权限设置中允许访问后重新点击“开始”。', 'error', true);
+  } else if (errorName === 'NotFoundError' || errorName === 'OverconstrainedError') {
+    updatePermissionMessage('未检测到可用的摄像头设备，请确认外设连接正常后重试。', 'error', true);
+  } else {
+    updatePermissionMessage('摄像头初始化失败：' + (err.message || '未知错误'), 'error', true);
+  }
 }
 function applySettings() {
   const s = loadSettings();
