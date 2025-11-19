@@ -12,6 +12,10 @@
     <div class="controls">
       <button id="start">开始</button>
       <button id="stop" disabled>停止</button>
+      <label>本地图片:
+        <input id="imageFile" type="file" accept="image/*" />
+      </label>
+      <button id="inferImage">上传并推理</button>
       <label>服务地址:
         <input id="server" type="text" placeholder="http://localhost:8000" />
       </label>
@@ -72,8 +76,23 @@
       <label><input id="showSkeleton" type="checkbox" checked /> 骨架</label>
     </div>
     <div id="permissionStatus" class="notice" hidden></div>
-    <div class="stage">
-      <canvas id="canvas"></canvas>
+    <div class="layout">
+      <div class="stage">
+        <canvas id="canvas"></canvas>
+      </div>
+      <aside class="sidebar" id="detectionsSidebar">
+        <h2>检测概览</h2>
+        <div class="sidebar-section">
+          <div id="summaryTotal"></div>
+          <div id="summaryModel"></div>
+          <div id="summaryDevice"></div>
+          <div id="summaryTiming"></div>
+        </div>
+        <div class="sidebar-section">
+          <h3>类别计数</h3>
+          <ul id="classCounts"></ul>
+        </div>
+      </aside>
     </div>
     <div id="stats"></div>
   </div>

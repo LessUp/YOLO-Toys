@@ -24,6 +24,14 @@ const maskAlphaInput = document.getElementById('maskAlpha');
 const showSkeletonCb = document.getElementById('showSkeleton');
 const useWsCb = document.getElementById('useWs');
 const permissionStatus = document.getElementById('permissionStatus');
+const imageFileInput = document.getElementById('imageFile');
+const inferImageBtn = document.getElementById('inferImage');
+const detectionsSidebar = document.getElementById('detectionsSidebar');
+const classCountsEl = document.getElementById('classCounts');
+const summaryTotalEl = document.getElementById('summaryTotal');
+const summaryModelEl = document.getElementById('summaryModel');
+const summaryDeviceEl = document.getElementById('summaryDevice');
+const summaryTimingEl = document.getElementById('summaryTiming');
 
 let running = false;
 let busy = false;
@@ -269,6 +277,118 @@ function drawDetections() {
   }
 }
 
+function updateDetectionsSidebar(params) {
+  if (!detectionsSidebar || !classCountsEl || !summaryTotalEl || !summaryModelEl || !summaryDeviceEl || !summaryTimingEl) {
+    return;
+  }
+  const { data, deviceValue, halfVal, imgszVal, rtMs, backendMs } = params || {};
+  const total = Array.isArray(detections) ? detections.length : 0;
+  summaryTotalEl.textContent = `检测总数：${total}`;
+  const modelName = data && data.model ? data.model : '-';
+  summaryModelEl.textContent = `模型：${modelName}`;
+  const dvShow = deviceValue || 'auto';
+  const halfShow = halfVal ? 'FP16' : 'FP32';
+  const imgszShow = !Number.isNaN(imgszVal) && imgszVal ? imgszVal : '-';
+  summaryDeviceEl.textContent = `设备：${dvShow}，精度：${halfShow}，imgsz=${imgszShow}`;
+  const backendShow = typeof backendMs === 'number' ? backendMs.toFixed(1) : '-';
+  const rtShow = typeof rtMs === 'number' ? rtMs.toFixed(1) : '-';
+  summaryTimingEl.textContent = `后端：${backendShow}ms | 往返：${rtShow}ms`;
+  const counts = {};
+  for (const d of detections || []) {
+    const label = d && d.label ? d.label : 'unknown';
+    counts[label] = (counts[label] || 0) + 1;
+  }
+  classCountsEl.innerHTML = '';
+  Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .forEach(([label, count]) => {
+      const li = document.createElement('li');
+      li.textContent = `${label}：${count}`;
+      classCountsEl.appendChild(li);
+    });
+}
+
+async function runImageInference(file) {
+  if (!file) {
+    statsEl.textContent = '请先选择一张图片';
+    return;
+  }
+  const base = (serverInput?.value?.trim() || baseUrl).replace(/\/$/, '');
+  const cv = parseFloat(confInput?.value || '');
+  const iv = parseFloat(iouInput?.value || '');
+  const mv = parseInt(maxDetInput?.value || '');
+  const dv = (deviceSelect?.value || 'auto');
+  const model = (customModelInput?.value?.trim()) || (modelSelect?.value || '');
+  const include = [showMasksCb?.checked ? 'masks' : '', showKeypointsCb?.checked ? 'keypoints' : ''].filter(Boolean).join(',');
+  const imgszVal = parseInt(imgszInput?.value || '');
+  const halfVal = !!halfCb?.checked;
+  const fd = new FormData();
+  fd.append('file', file, file.name || 'image.jpg');
+  const url = new URL(base + '/infer');
+  if (!Number.isNaN(cv)) url.searchParams.set('conf', String(cv));
+  if (!Number.isNaN(iv)) url.searchParams.set('iou', String(iv));
+  if (!Number.isNaN(mv)) url.searchParams.set('max_det', String(mv));
+  if (dv && dv !== 'auto') url.searchParams.set('device', dv);
+  if (model) url.searchParams.set('model', model);
+  url.searchParams.set('include', include);
+  if (!Number.isNaN(imgszVal)) url.searchParams.set('imgsz', String(imgszVal));
+  if (halfVal) url.searchParams.set('half', '1');
+  const t0 = performance.now();
+  try {
+    const res = await fetch(url.toString(), { method: 'POST', body: fd });
+    if (!res.ok) {
+      statsEl.textContent = '请求失败: ' + res.status;
+      return;
+    }
+    const data = await res.json();
+    const imgUrl = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      canvas.width = img.width || canvas.width || 1;
+      canvas.height = img.height || canvas.height || 1;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(imgUrl);
+      detections = data.detections || [];
+      if (data.width && data.height) {
+        lastInferSize = { width: data.width, height: data.height };
+      } else {
+        lastInferSize = { width: canvas.width, height: canvas.height };
+      }
+      if (data.task) {
+        lastTask = data.task;
+      }
+      drawDetections();
+      const t1 = performance.now();
+      const dvShow = dv || 'auto';
+      const halfShow = halfVal ? 'fp16' : 'fp32';
+      const imgszShow = !Number.isNaN(imgszVal) ? imgszVal : '-';
+      const backendMs = typeof data.inference_time === 'number' ? data.inference_time : null;
+      const backendShow = backendMs != null ? backendMs.toFixed(1) : '-';
+      statsEl.textContent = `本地图片 ${canvas.width}x${canvas.height} | 设备 ${dvShow} | 任务 ${lastTask} | 精度 ${halfShow} | imgsz ${imgszShow} | 后端 ${backendShow}ms | 往返 ${(t1 - t0).toFixed(1)}ms | 检测 ${detections.length}`;
+      updateDetectionsSidebar({
+        data,
+        deviceValue: dvShow,
+        halfVal,
+        imgszVal,
+        rtMs: t1 - t0,
+        backendMs,
+      });
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(imgUrl);
+      statsEl.textContent = '图片加载失败';
+    };
+    img.src = imgUrl;
+  } catch (e) {
+    statsEl.textContent = '请求失败';
+  } finally {
+    if (imageFileInput) {
+      imageFileInput.value = '';
+    }
+  }
+}
+
 async function sendFrame() {
   if (!running || busy) return;
   busy = true;
@@ -426,6 +546,20 @@ stopBtn.addEventListener('click', () => {
   stopBtn.disabled = true;
   startBtn.disabled = false;
 });
+
+if (inferImageBtn) {
+  inferImageBtn.addEventListener('click', async () => {
+    const file = imageFileInput && imageFileInput.files && imageFileInput.files[0];
+    if (!file) {
+      statsEl.textContent = '请先选择一张图片';
+      return;
+    }
+    if (running) {
+      stopBtn.click();
+    }
+    await runImageInference(file);
+  });
+}
 
 async function initModels() {
   try {
