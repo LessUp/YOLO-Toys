@@ -15,7 +15,6 @@ canvas { max-width: 100%; width: 100%; height: auto; }
 .notice.info { border-color: #60a5fa; background: rgba(96, 165, 250, 0.12); }
 .notice.warning { border-color: #fbbf24; background: rgba(251, 191, 36, 0.12); }
 .notice.error { border-color: #f87171; background: rgba(248, 113, 113, 0.12); }
-.
 .sidebar { min-width: 220px; max-width: 260px; background: #111827; border: 1px solid #374151; border-radius: 12px; padding: 12px 14px; font-size: 13px; color: #e5e7eb; }
 .sidebar h2 { margin: 0 0 8px; font-size: 16px; }
 .sidebar h3 { margin: 12px 0 6px; font-size: 14px; }

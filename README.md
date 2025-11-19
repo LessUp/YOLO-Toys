@@ -1,4 +1,8 @@
 # 实时视频流物体识别（FastAPI + YOLOv8 + 原生前端）
+
+## 文档导航
+- [详细教学文档（docs/README.md）](docs/README.md)
+
 ### 使用 Docker Compose
 ```
 docker compose up --build -d
