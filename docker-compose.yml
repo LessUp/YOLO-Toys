@@ -5,7 +5,7 @@ services:
     image: vision-det:latest
     container_name: vision-det
     environment:
-      - MODEL_NAME=${MODEL_NAME:-yolov8n.pt}
+      - MODEL_NAME=${MODEL_NAME:-yolov8s.pt}
       - CONF_THRESHOLD=${CONF_THRESHOLD:-0.3}
       - IOU_THRESHOLD=${IOU_THRESHOLD:-0.45}
       - MAX_DET=${MAX_DET:-300}

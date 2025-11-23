@@ -52,7 +52,7 @@ vision/
 ```
 
 ## 本地运行
-1) 创建虚拟环境并安装依赖（首次会自动下载 `yolov8n.pt` 权重，需联网）：
+1) 创建虚拟环境并安装依赖（首次会自动下载 `yolov8s.pt` 权重，需联网）：
 ```
 python3 -m venv .venv
 .venv/bin/python -m pip install -U pip
@@ -77,7 +77,7 @@ http://localhost:8000/
     - `iou` 浮点，NMS IoU 阈值，默认 0.45
     - `max_det` 整数，最大检测数，默认 300
     - `device` 字符串，可选 `cpu`/`mps`/`cuda:0`；默认自动
-    - `model` 字符串，模型名或路径（如 `yolov8n.pt`、`yolov8n-seg.pt`）
+    - `model` 字符串，模型名或路径（如 `yolov8s.pt`、`yolov8s-seg.pt`）
     - `include` 字符串，逗号分隔，支持 `masks`、`keypoints`，用于控制返回体中是否包含掩膜/关键点（默认都包含）
     - `imgsz` 整数，推理尺寸（如 640），可加速/影响精度
     - `half` 布尔，是否使用 FP16（仅 CUDA 可用）
@@ -125,13 +125,24 @@ http://localhost:8000/
 docker build -t vision-det .
 ```
 
-2) 运行容器：
+2) 运行容器（CPU 示例）：
 ```
 docker run --rm -it -p 8000:8000 \
-  -e MODEL_NAME=yolov8n.pt \
+  -e MODEL_NAME=yolov8s.pt \
   -e CONF_THRESHOLD=0.3 \
   -e IOU_THRESHOLD=0.45 \
   -e DEVICE=cpu \
+  vision-det
+```
+
+GPU（NVIDIA）示例：
+```
+docker run --rm -it -p 8000:8000 \
+  --gpus all \
+  -e MODEL_NAME=yolov8s.pt \
+  -e CONF_THRESHOLD=0.3 \
+  -e IOU_THRESHOLD=0.45 \
+  -e DEVICE=cuda:0 \
   vision-det
 ```
 
@@ -142,7 +153,7 @@ http://localhost:8000/
 
 ## 配置
 - 后端环境变量（在 shell、.env 或 Docker -e 中设置）：
-  - `MODEL_NAME`：默认 `yolov8n.pt`
+  - `MODEL_NAME`：默认 `yolov8s.pt`（精度更高，推荐在有 GPU 时使用）
   - `CONF_THRESHOLD`：默认 `0.3`
   - `IOU_THRESHOLD`：默认 `0.45`
   - `MAX_DET`：默认 `300`
@@ -152,7 +163,12 @@ http://localhost:8000/
   - `MAX_UPLOAD_MB`：上传图片大小上限（MB），默认 `10`
   - `MAX_CONCURRENCY`：后端并发推理限制，默认 `4`
   - WebSocket 同样受上述参数限制
-
+- GPU 使用要点：
+  - 本机 NVIDIA / AMD（ROCm）：确保安装 GPU 版 `torch`，不设置 `DEVICE` 时会自动选择；也可显式设置为 `cuda:0`。
+  - 本机 Apple M1/M2/M3：安装支持 MPS 的 `torch`，不设置 `DEVICE` 时自动选择；也可设置为 `mps`。
+  - Docker + NVIDIA：运行容器时添加 `--gpus all`，并通过 `-e DEVICE=cuda:0` 或留空让后端自动选择。
+  - Docker + AMD（ROCm）：使用 ROCm 官方 PyTorch 镜像并映射 ROCm 设备，运行时同样通过 `DEVICE=cuda:0` 或自动选择。
+  - Docker on Apple Silicon：当前仅支持 CPU 推理，容器内不会使用到 M 系列 GPU。
 - 前端参数（页面顶部控件）：
   - 服务地址：默认 `window.location.origin`，跨设备访问可填 `http://<LAN_IP>:8000`
   - 发送帧率：3/5/10 fps
