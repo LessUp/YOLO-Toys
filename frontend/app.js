@@ -38,6 +38,32 @@ const settingsOverlay = document.getElementById('settingsOverlay');
 const openSettingsBtn = document.getElementById('openSettings');
 const closeSettingsBtn = document.getElementById('closeSettings');
 const toggleSidebarBtn = document.getElementById('toggleSidebar');
+const themeToggleBtn = document.getElementById('themeToggle');
+const iconMoon = themeToggleBtn.querySelector('.icon-moon');
+const iconSun = themeToggleBtn.querySelector('.icon-sun');
+const emptyState = document.getElementById('emptyState');
+
+// Theme Logic
+function setTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('theme', theme);
+  if (theme === 'light') {
+    iconMoon.style.display = 'none';
+    iconSun.style.display = 'block';
+  } else {
+    iconMoon.style.display = 'block';
+    iconSun.style.display = 'none';
+  }
+}
+
+// Init Theme
+const savedTheme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+setTheme(savedTheme);
+
+themeToggleBtn.addEventListener('click', () => {
+  const current = document.documentElement.getAttribute('data-theme');
+  setTheme(current === 'light' ? 'dark' : 'light');
+});
 
 openSettingsBtn.addEventListener('click', () => {
   settingsOverlay.classList.add('open');
@@ -419,6 +445,7 @@ async function runImageInference(file) {
         lastTask = data.task;
       }
       drawDetections();
+      emptyState.style.display = 'none';
       
       const t1 = performance.now();
       statsEl.textContent = `完成: ${detections.length} 个目标, 耗时 ${(t1 - t0).toFixed(0)}ms`;
@@ -592,6 +619,7 @@ startBtn.addEventListener('click', async () => {
     
     running = true;
     stopBtn.disabled = false;
+    emptyState.style.display = 'none';
     draw();
     sendFrame();
   } catch (e) {
@@ -613,16 +641,34 @@ stopBtn.addEventListener('click', () => {
   }
   stopBtn.disabled = true;
   statsEl.textContent = 'Ready';
+  emptyState.style.display = 'flex';
   
   // Clear canvas
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 });
 
+function showToast(message, type = 'info') {
+  let container = document.querySelector('.toast-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.className = 'toast-container';
+    document.body.appendChild(container);
+  }
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = message;
+  container.appendChild(el);
+  setTimeout(() => {
+    el.style.opacity = '0';
+    setTimeout(() => el.remove(), 300);
+  }, 3000);
+}
+
 if (inferImageBtn) {
   inferImageBtn.addEventListener('click', async () => {
     const file = imageFileInput && imageFileInput.files && imageFileInput.files[0];
     if (!file) {
-      alert('请先选择一张图片'); // Simple alert for now, or could use a toast
+      showToast('请先选择一张图片', 'warning');
       return;
     }
     if (running) stopBtn.click();
