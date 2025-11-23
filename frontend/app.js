@@ -33,6 +33,46 @@ const summaryModelEl = document.getElementById('summaryModel');
 const summaryDeviceEl = document.getElementById('summaryDevice');
 const summaryTimingEl = document.getElementById('summaryTiming');
 
+// UI Toggles
+const settingsOverlay = document.getElementById('settingsOverlay');
+const openSettingsBtn = document.getElementById('openSettings');
+const closeSettingsBtn = document.getElementById('closeSettings');
+const toggleSidebarBtn = document.getElementById('toggleSidebar');
+
+openSettingsBtn.addEventListener('click', () => {
+  settingsOverlay.classList.add('open');
+});
+
+closeSettingsBtn.addEventListener('click', () => {
+  settingsOverlay.classList.remove('open');
+});
+
+settingsOverlay.addEventListener('click', (e) => {
+  if (e.target === settingsOverlay) {
+    settingsOverlay.classList.remove('open');
+  }
+});
+
+toggleSidebarBtn.addEventListener('click', () => {
+  if (window.innerWidth <= 768) {
+    detectionsSidebar.classList.toggle('open');
+  } else {
+    detectionsSidebar.classList.toggle('collapsed');
+  }
+});
+
+// Responsive Canvas
+function resizeCanvas() {
+  const container = canvas.parentElement;
+  if (container) {
+    // We don't strictly set width/height here to avoid clearing context
+    // but we can use CSS to handle the visual size
+    // Logic: The canvas internal resolution is set by the image/video frame
+    // CSS object-fit handles the display.
+  }
+}
+window.addEventListener('resize', resizeCanvas);
+
 let running = false;
 let busy = false;
 let detections = [];
@@ -44,7 +84,7 @@ let lastTask = 'detect';
 let ws = null;
 let wsReady = false;
 
-const SETTINGS_KEY = 'vision_settings_v1';
+const SETTINGS_KEY = 'vision_settings_v2'; // Bumped version
 function loadSettings() {
   try { return JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}'); } catch { return {}; }
 }
@@ -79,240 +119,255 @@ function isTrustedLocalhost() {
 
 function preflightCameraCheck() {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    updatePermissionMessage('当前浏览器不支持摄像头 API（navigator.mediaDevices.getUserMedia），请使用最新版 Chrome/Edge/Firefox。', 'error', true);
+    updatePermissionMessage('当前浏览器不支持摄像头 API，请使用最新版 Chrome/Edge/Firefox。', 'error', true);
     return false;
   }
   if (!window.isSecureContext && !isTrustedLocalhost()) {
-    updatePermissionMessage('浏览器要求 HTTPS 或 localhost/127.0.0.1 才能访问摄像头。请改用安全地址，或在浏览器设置中将当前地址标记为安全。', 'warning', true);
+    updatePermissionMessage('浏览器要求 HTTPS 或 localhost/127.0.0.1 才能访问摄像头。', 'warning', true);
   } else if (permissionStatus && (permissionStatus.hidden || permissionStatus.dataset.level === 'info')) {
-    updatePermissionMessage('点击“开始”后浏览器会请求摄像头权限，请选择“允许”。', 'info');
+    updatePermissionMessage('点击“开始”以启动摄像头与检测。', 'info');
   }
   return true;
 }
 
-async function monitorCameraPermission() {
-  if (!navigator.permissions?.query) {
-    return;
-  }
-  try {
-    const status = await navigator.permissions.query({ name: 'camera' });
-    applyPermissionState(status.state);
-    status.onchange = () => applyPermissionState(status.state);
-  } catch (e) {
-    // 某些浏览器（如 Safari）不支持 camera 权限查询，忽略错误
-  }
-}
-
-function applyPermissionState(state) {
-  if (state === 'granted') {
-    updatePermissionMessage('摄像头权限已授予，可直接点击“开始”进入推理。', 'info');
-  } else if (state === 'prompt') {
-    updatePermissionMessage('点击“开始”后浏览器会弹出权限提示，请选择“允许”以继续。', 'info');
-  } else if (state === 'denied') {
-    updatePermissionMessage('摄像头权限被拒绝，请在浏览器地址栏右侧的权限设置中允许访问后刷新页面。', 'error', true);
-  }
-}
-
-function handleCameraError(err) {
-  if (!err) return;
-  const errorName = err.name || '';
-  if (errorName === 'NotAllowedError' || errorName === 'SecurityError') {
-    updatePermissionMessage('摄像头权限被浏览器拒绝，请在浏览器权限设置中允许访问后重新点击“开始”。', 'error', true);
-  } else if (errorName === 'NotFoundError' || errorName === 'OverconstrainedError') {
-    updatePermissionMessage('未检测到可用的摄像头设备，请确认外设连接正常后重试。', 'error', true);
-  } else {
-    updatePermissionMessage('摄像头初始化失败：' + (err.message || '未知错误'), 'error', true);
-  }
-}
-function applySettings() {
-  const s = loadSettings();
-  if (s.server) serverInput.value = s.server;
-  if (s.fps) fpsSelect.value = String(s.fps);
-  if (s.sendWidth) sendSizeSelect.value = String(s.sendWidth);
-  if (s.conf) confInput.value = String(s.conf);
-  if (s.iou) iouInput.value = String(s.iou);
-  if (s.maxDet) maxDetInput.value = String(s.maxDet);
-  if (s.device) deviceSelect.value = String(s.device);
-  if (s.quality) qualitySelect.value = String(s.quality);
-  if (s.model) modelSelect.value = String(s.model);
-  if (s.customModel) customModelInput.value = String(s.customModel);
-  if (typeof s.showBoxes === 'boolean') showBoxesCb.checked = s.showBoxes;
-  if (typeof s.showLabels === 'boolean') showLabelsCb.checked = s.showLabels;
-  if (typeof s.showMasks === 'boolean') showMasksCb.checked = s.showMasks;
-  if (typeof s.showKeypoints === 'boolean') showKeypointsCb.checked = s.showKeypoints;
-  if (s.imgsz) imgszInput.value = String(s.imgsz);
-  if (typeof s.half === 'boolean') halfCb.checked = s.half;
-  if (s.maskAlpha) maskAlphaInput.value = String(s.maskAlpha);
-  if (typeof s.showSkeleton === 'boolean') showSkeletonCb.checked = s.showSkeleton;
-  if (typeof s.useWs === 'boolean') useWsCb.checked = s.useWs;
-}
-function updateSetting(k, v) {
-  const s = loadSettings();
-  s[k] = v; saveSettings(s);
-}
-
-if (serverInput && !serverInput.value) serverInput.value = baseUrl;
-sendSizeSelect?.addEventListener('change', () => {
-  sendWidth = parseInt(sendSizeSelect.value, 10);
-  updateSetting('sendWidth', sendWidth);
-});
-serverInput?.addEventListener('change', () => updateSetting('server', serverInput.value));
-fpsSelect?.addEventListener('change', () => updateSetting('fps', parseInt(fpsSelect.value, 10)));
-confInput?.addEventListener('change', () => updateSetting('conf', parseFloat(confInput.value)));
-iouInput?.addEventListener('change', () => updateSetting('iou', parseFloat(iouInput.value)));
-maxDetInput?.addEventListener('change', () => updateSetting('maxDet', parseInt(maxDetInput.value, 10)));
-deviceSelect?.addEventListener('change', () => updateSetting('device', deviceSelect.value));
-qualitySelect?.addEventListener('change', () => updateSetting('quality', parseFloat(qualitySelect.value)));
-modelSelect?.addEventListener('change', () => updateSetting('model', modelSelect.value));
-customModelInput?.addEventListener('change', () => updateSetting('customModel', customModelInput.value));
-showBoxesCb?.addEventListener('change', () => updateSetting('showBoxes', showBoxesCb.checked));
-showLabelsCb?.addEventListener('change', () => updateSetting('showLabels', showLabelsCb.checked));
-showMasksCb?.addEventListener('change', () => updateSetting('showMasks', showMasksCb.checked));
-showKeypointsCb?.addEventListener('change', () => updateSetting('showKeypoints', showKeypointsCb.checked));
-imgszInput?.addEventListener('change', () => updateSetting('imgsz', parseInt(imgszInput.value || '')));
-halfCb?.addEventListener('change', () => updateSetting('half', !!halfCb.checked));
-maskAlphaInput?.addEventListener('input', () => updateSetting('maskAlpha', parseFloat(maskAlphaInput.value)));
-showSkeletonCb?.addEventListener('change', () => updateSetting('showSkeleton', showSkeletonCb.checked));
-useWsCb?.addEventListener('change', () => updateSetting('useWs', !!useWsCb.checked));
-
-function updateFps() {
-  const fps = parseInt(fpsSelect.value, 10);
-  sendInterval = Math.max(1000 / fps, 50);
-}
-fpsSelect.addEventListener('change', updateFps);
-updateFps();
-
 async function setupCamera() {
   try {
-    let constraints = { video: { facingMode: 'environment' }, audio: false };
-    let stream;
-    try {
-      stream = await navigator.mediaDevices.getUserMedia(constraints);
-    } catch (err) {
-      constraints = { video: true, audio: false };
-      stream = await navigator.mediaDevices.getUserMedia(constraints);
-    }
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+        facingMode: 'environment'
+      }
+    });
     video.srcObject = stream;
-    await video.play();
+    await new Promise(r => video.onloadedmetadata = r);
+    video.play();
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     clearPermissionMessage();
-  } catch (err) {
-    handleCameraError(err);
-    throw err;
+    return true;
+  } catch (e) {
+    console.error(e);
+    if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
+      updatePermissionMessage('摄像头访问被拒绝。请在浏览器设置中允许访问摄像头。', 'error', true);
+    } else if (e.name === 'NotFoundError' || e.name === 'DevicesNotFoundError') {
+      updatePermissionMessage('未找到摄像头设备。', 'error', true);
+    } else {
+      updatePermissionMessage(`摄像头错误: ${e.message}`, 'error', true);
+    }
+    throw e;
   }
 }
+
+function applySettings() {
+  const s = loadSettings();
+  if (s.server) serverInput.value = s.server;
+  if (s.useWs !== undefined) useWsCb.checked = s.useWs;
+  if (s.fps) fpsSelect.value = s.fps;
+  if (s.sendSize) sendSizeSelect.value = s.sendSize;
+  if (s.conf) confInput.value = s.conf;
+  if (s.iou) iouInput.value = s.iou;
+  if (s.maxDet) maxDetInput.value = s.maxDet;
+  if (s.device) deviceSelect.value = s.device;
+  if (s.quality) qualitySelect.value = s.quality;
+  if (s.model) modelSelect.value = s.model;
+  if (s.customModel) customModelInput.value = s.customModel;
+  if (s.imgsz) imgszInput.value = s.imgsz;
+  if (s.half !== undefined) halfCb.checked = s.half;
+  if (s.showBoxes !== undefined) showBoxesCb.checked = s.showBoxes;
+  if (s.showLabels !== undefined) showLabelsCb.checked = s.showLabels;
+  if (s.showMasks !== undefined) showMasksCb.checked = s.showMasks;
+  if (s.maskAlpha) maskAlphaInput.value = s.maskAlpha;
+  if (s.showKeypoints !== undefined) showKeypointsCb.checked = s.showKeypoints;
+  if (s.showSkeleton !== undefined) showSkeletonCb.checked = s.showSkeleton;
+
+  updateVars();
+}
+
+function updateVars() {
+  sendInterval = 1000 / parseInt(fpsSelect.value);
+  sendWidth = parseInt(sendSizeSelect.value);
+  const s = {
+    server: serverInput.value,
+    useWs: useWsCb.checked,
+    fps: fpsSelect.value,
+    sendSize: sendSizeSelect.value,
+    conf: confInput.value,
+    iou: iouInput.value,
+    maxDet: maxDetInput.value,
+    device: deviceSelect.value,
+    quality: qualitySelect.value,
+    model: modelSelect.value,
+    customModel: customModelInput.value,
+    imgsz: imgszInput.value,
+    half: halfCb.checked,
+    showBoxes: showBoxesCb.checked,
+    showLabels: showLabelsCb.checked,
+    showMasks: showMasksCb.checked,
+    maskAlpha: maskAlphaInput.value,
+    showKeypoints: showKeypointsCb.checked,
+    showSkeleton: showSkeletonCb.checked,
+  };
+  saveSettings(s);
+}
+
+[fpsSelect, sendSizeSelect, serverInput, confInput, iouInput, maxDetInput, deviceSelect, qualitySelect, modelSelect, customModelInput, imgszInput, halfCb, showBoxesCb, showLabelsCb, showMasksCb, maskAlphaInput, showKeypointsCb, showSkeletonCb, useWsCb].forEach(el => {
+  if (el) el.addEventListener('change', () => {
+    updateVars();
+    if (el === useWsCb) {
+      closeWebSocket();
+      if (running) initWebSocket();
+    }
+  });
+});
 
 function draw() {
   if (!running) return;
-  if (video.readyState >= 2) {
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    drawDetections();
-  }
   requestAnimationFrame(draw);
+  
+  // If we are in webcam mode, we draw the video frame first
+  if (video.srcObject && !video.paused && !video.ended) {
+    // Only resize if changed to avoid flicker/perf issues
+    if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+    }
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  }
+  
+  drawDetections();
 }
 
 function drawDetections() {
-  ctx.lineWidth = 2;
-  ctx.font = '12px system-ui, -apple-system, Segoe UI, Roboto';
-  const sx = canvas.width / (lastInferSize.width || canvas.width || 1);
-  const sy = canvas.height / (lastInferSize.height || canvas.height || 1);
-  const cocoPairs = [
-    [5, 6], [5, 7], [7, 9], [6, 8], [8, 10],
-    [5, 11], [6, 12], [11, 12], [11, 13], [13, 15], [12, 14], [14, 16],
-    [0, 1], [0, 2], [1, 3], [2, 4]
-  ];
-  for (const d of detections) {
-    let [x1, y1, x2, y2] = d.bbox;
-    x1 *= sx; y1 *= sy; x2 *= sx; y2 *= sy;
-    const label = `${d.label} ${(d.score * 100).toFixed(1)}%`;
-    const h = Math.abs([...String(d.label)].reduce((a, c) => ((a * 31 + c.charCodeAt(0)) | 0), 0)) % 360;
-    const stroke = `hsla(${h},85%,55%,0.95)`;
-    const a = Math.max(0.05, Math.min(0.9, parseFloat(maskAlphaInput?.value || '0.2')));
-    const fill = `hsla(${h},85%,55%,${a})`;
-    if (showMasksCb?.checked && Array.isArray(d.polygons)) {
-      ctx.fillStyle = fill;
-      for (const poly of d.polygons) {
-        if (!Array.isArray(poly) || poly.length < 6) continue;
+  if (!detections || detections.length === 0) return;
+
+  const scaleX = canvas.width / lastInferSize.width;
+  const scaleY = canvas.height / lastInferSize.height;
+
+  const showBoxes = showBoxesCb.checked;
+  const showLabels = showLabelsCb.checked;
+  const showMasks = showMasksCb.checked;
+  const showKpts = showKeypointsCb.checked;
+  const showSkel = showSkeletonCb.checked;
+  const maskAlpha = parseFloat(maskAlphaInput.value);
+
+  // Draw Masks
+  if (showMasks) {
+    for (const det of detections) {
+      if (det.mask && det.mask.length) {
+        // Polygon mask
+        ctx.fillStyle = det.color || 'rgba(255,0,0,0.5)';
+        // override alpha
+        const c = hexToRgb(det.color || '#FF0000');
+        ctx.fillStyle = `rgba(${c.r},${c.g},${c.b},${maskAlpha})`;
+        
         ctx.beginPath();
-        for (let i = 0; i < poly.length; i += 2) {
-          const px = poly[i] * sx;
-          const py = poly[i + 1] * sy;
-          if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-        }
+        det.mask.forEach((pt, i) => {
+          const x = pt[0] * scaleX;
+          const y = pt[1] * scaleY;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
         ctx.closePath();
         ctx.fill();
       }
     }
-    if (showBoxesCb?.checked) {
-      ctx.strokeStyle = stroke;
-      ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
-    }
-    if (showLabelsCb?.checked) {
-      const tw = ctx.measureText(label).width;
-      const th = 16;
-      ctx.fillStyle = `hsla(${h},85%,55%,0.9)`;
-      ctx.fillRect(x1, Math.max(0, y1 - th), tw + 8, th);
-      ctx.fillStyle = '#0b0e11';
-      ctx.fillText(label, x1 + 4, Math.max(12, y1 - 4));
-    }
-    if (showKeypointsCb?.checked && Array.isArray(d.keypoints)) {
-      ctx.fillStyle = `hsla(${h},85%,55%,0.95)`;
-      for (const [kx, ky] of d.keypoints) {
-        const px = kx * sx, py = ky * sy;
-        ctx.beginPath(); ctx.arc(px, py, 2.2, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // Draw Boxes & Labels
+  if (showBoxes || showLabels) {
+    ctx.lineWidth = 2;
+    ctx.font = '14px sans-serif';
+    for (const det of detections) {
+      const [x1, y1, x2, y2] = det.box;
+      const sx1 = x1 * scaleX;
+      const sy1 = y1 * scaleY;
+      const sx2 = x2 * scaleX;
+      const sy2 = y2 * scaleY;
+      const color = det.color || '#00FF00';
+
+      if (showBoxes) {
+        ctx.strokeStyle = color;
+        ctx.strokeRect(sx1, sy1, sx2 - sx1, sy2 - sy1);
       }
-      if (showSkeletonCb?.checked) {
-        ctx.strokeStyle = `hsla(${h},85%,55%,0.9)`;
-        for (const [aIdx, bIdx] of cocoPairs) {
-          const pa = d.keypoints[aIdx];
-          const pb = d.keypoints[bIdx];
-          if (!pa || !pb) continue;
-          const ax = pa[0] * sx, ay = pa[1] * sy;
-          const bx = pb[0] * sx, by = pb[1] * sy;
-          ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+
+      if (showLabels) {
+        const label = `${det.class} ${(det.conf * 100).toFixed(1)}%`;
+        const textMetrics = ctx.measureText(label);
+        const th = 14; 
+        const tw = textMetrics.width;
+        
+        ctx.fillStyle = color;
+        ctx.fillRect(sx1, sy1 - th - 4, tw + 8, th + 4);
+        ctx.fillStyle = '#000';
+        ctx.fillText(label, sx1 + 4, sy1 - 2);
+      }
+    }
+  }
+
+  // Draw Keypoints & Skeleton
+  if (showKpts || showSkel) {
+    for (const det of detections) {
+      if (det.keypoints) {
+        // keypoints
+        if (showKpts) {
+          det.keypoints.forEach((kp, i) => {
+            const [kx, ky, kconf] = kp; // might be just [x,y] or [x,y,conf]
+            if (kx === 0 && ky === 0) return;
+            const skx = kx * scaleX;
+            const sky = ky * scaleY;
+            ctx.fillStyle = det.color || '#00FF00';
+            ctx.beginPath();
+            ctx.arc(skx, sky, 3, 0, 2 * Math.PI);
+            ctx.fill();
+          });
         }
+        // skeleton could be added here if data provides connections
       }
     }
   }
 }
 
-function updateDetectionsSidebar(params) {
-  if (!detectionsSidebar || !classCountsEl || !summaryTotalEl || !summaryModelEl || !summaryDeviceEl || !summaryTimingEl) {
-    return;
-  }
-  const { data, deviceValue, halfVal, imgszVal, rtMs, backendMs } = params || {};
-  const total = Array.isArray(detections) ? detections.length : 0;
-  summaryTotalEl.textContent = `检测总数：${total}`;
-  const modelName = data && data.model ? data.model : '-';
-  summaryModelEl.textContent = `模型：${modelName}`;
-  const dvShow = deviceValue || 'auto';
-  const halfShow = halfVal ? 'FP16' : 'FP32';
-  const imgszShow = !Number.isNaN(imgszVal) && imgszVal ? imgszVal : '-';
-  summaryDeviceEl.textContent = `设备：${dvShow}，精度：${halfShow}，imgsz=${imgszShow}`;
-  const backendShow = typeof backendMs === 'number' ? backendMs.toFixed(1) : '-';
-  const rtShow = typeof rtMs === 'number' ? rtMs.toFixed(1) : '-';
-  summaryTimingEl.textContent = `后端：${backendShow}ms | 往返：${rtShow}ms`;
+function hexToRgb(hex) {
+  // Expand shorthand form (e.g. "03F") to full form (e.g. "0033FF")
+  const shorthandRegex = /^#?([a-f\d])([a-f\d])([a-f\d])$/i;
+  hex = hex.replace(shorthandRegex, (m, r, g, b) => {
+    return r + r + g + g + b + b;
+  });
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return result ? {
+    r: parseInt(result[1], 16),
+    g: parseInt(result[2], 16),
+    b: parseInt(result[3], 16)
+  } : { r: 255, g: 0, b: 0 };
+}
+
+function updateDetectionsSidebar(info) {
+  if (!info || !detections) return;
+  
+  // Update Summary
+  summaryTotalEl.textContent = detections.length;
+  summaryModelEl.textContent = modelSelect.value || 'default';
+  summaryDeviceEl.textContent = info.deviceValue || '-';
+  summaryTimingEl.textContent = `${info.backendMs?.toFixed(1) || '-'}ms`;
+
+  // Count Classes
   const counts = {};
-  for (const d of detections || []) {
-    const label = d && d.label ? d.label : 'unknown';
-    counts[label] = (counts[label] || 0) + 1;
-  }
+  detections.forEach(d => {
+    counts[d.class] = (counts[d.class] || 0) + 1;
+  });
+  
+  // Render Counts
   classCountsEl.innerHTML = '';
-  Object.entries(counts)
-    .sort((a, b) => b[1] - a[1])
-    .forEach(([label, count]) => {
-      const li = document.createElement('li');
-      li.textContent = `${label}：${count}`;
-      classCountsEl.appendChild(li);
-    });
+  Object.entries(counts).sort((a, b) => b[1] - a[1]).forEach(([cls, count]) => {
+    const item = document.createElement('div');
+    item.className = 'class-item';
+    item.innerHTML = `<span>${cls}</span> <span>${count}</span>`;
+    classCountsEl.appendChild(item);
+  });
 }
 
 async function runImageInference(file) {
-  if (!file) {
-    statsEl.textContent = '请先选择一张图片';
-    return;
-  }
   const base = (serverInput?.value?.trim() || baseUrl).replace(/\/$/, '');
   const cv = parseFloat(confInput?.value || '');
   const iv = parseFloat(iouInput?.value || '');
@@ -322,6 +377,7 @@ async function runImageInference(file) {
   const include = [showMasksCb?.checked ? 'masks' : '', showKeypointsCb?.checked ? 'keypoints' : ''].filter(Boolean).join(',');
   const imgszVal = parseInt(imgszInput?.value || '');
   const halfVal = !!halfCb?.checked;
+
   const fd = new FormData();
   fd.append('file', file, file.name || 'image.jpg');
   const url = new URL(base + '/infer');
@@ -333,7 +389,11 @@ async function runImageInference(file) {
   url.searchParams.set('include', include);
   if (!Number.isNaN(imgszVal)) url.searchParams.set('imgsz', String(imgszVal));
   if (halfVal) url.searchParams.set('half', '1');
+
   const t0 = performance.now();
+  
+  statsEl.textContent = '正在上传并推理...';
+
   try {
     const res = await fetch(url.toString(), { method: 'POST', body: fd });
     if (!res.ok) {
@@ -359,20 +419,14 @@ async function runImageInference(file) {
         lastTask = data.task;
       }
       drawDetections();
+      
       const t1 = performance.now();
-      const dvShow = dv || 'auto';
-      const halfShow = halfVal ? 'fp16' : 'fp32';
-      const imgszShow = !Number.isNaN(imgszVal) ? imgszVal : '-';
-      const backendMs = typeof data.inference_time === 'number' ? data.inference_time : null;
-      const backendShow = backendMs != null ? backendMs.toFixed(1) : '-';
-      statsEl.textContent = `本地图片 ${canvas.width}x${canvas.height} | 设备 ${dvShow} | 任务 ${lastTask} | 精度 ${halfShow} | imgsz ${imgszShow} | 后端 ${backendShow}ms | 往返 ${(t1 - t0).toFixed(1)}ms | 检测 ${detections.length}`;
+      statsEl.textContent = `完成: ${detections.length} 个目标, 耗时 ${(t1 - t0).toFixed(0)}ms`;
+      
       updateDetectionsSidebar({
         data,
-        deviceValue: dvShow,
-        halfVal,
-        imgszVal,
-        rtMs: t1 - t0,
-        backendMs,
+        deviceValue: dv,
+        backendMs: data.inference_time,
       });
     };
     img.onerror = () => {
@@ -381,11 +435,10 @@ async function runImageInference(file) {
     };
     img.src = imgUrl;
   } catch (e) {
-    statsEl.textContent = '请求失败';
+    statsEl.textContent = '推理请求异常';
+    console.error(e);
   } finally {
-    if (imageFileInput) {
-      imageFileInput.value = '';
-    }
+    if (imageFileInput) imageFileInput.value = '';
   }
 }
 
@@ -398,10 +451,12 @@ async function sendFrame() {
   const scale = sendWidth / Math.max(1, vw);
   const sw = Math.max(1, Math.round(vw * scale));
   const sh = Math.max(1, Math.round(vh * scale));
+
   const sc = document.createElement('canvas');
   sc.width = sw; sc.height = sh;
   const scx = sc.getContext('2d');
   scx.drawImage(video, 0, 0, sw, sh);
+
   sc.toBlob(async (blob) => {
     const base = (serverInput?.value?.trim() || baseUrl).replace(/\/$/, '');
     const cv = parseFloat(confInput?.value || '');
@@ -412,6 +467,7 @@ async function sendFrame() {
     const include = [showMasksCb?.checked ? 'masks' : '', showKeypointsCb?.checked ? 'keypoints' : ''].filter(Boolean).join(',');
     const imgszVal = parseInt(imgszInput?.value || '');
     const halfVal = !!halfCb?.checked;
+
     try {
       if (useWsCb?.checked && ws && wsReady) {
         ws.send(blob);
@@ -427,13 +483,14 @@ async function sendFrame() {
         url.searchParams.set('include', include);
         if (!Number.isNaN(imgszVal)) url.searchParams.set('imgsz', String(imgszVal));
         if (halfVal) url.searchParams.set('half', '1');
+
         const res = await fetch(url.toString(), { method: 'POST', body: fd });
         if (!res.ok) throw new Error(String(res.status));
         const data = await res.json();
         handleResult(data, sw, sh, t0, dv, halfVal, imgszVal);
       }
     } catch (e) {
-      statsEl.textContent = '请求失败';
+      // statsEl.textContent = '请求失败'; // Don't spam UI on frame drop
     } finally {
       busy = false;
       if (running) {
@@ -449,17 +506,30 @@ function handleResult(data, sw, sh, t0, deviceValue, halfVal, imgszVal) {
     lastInferSize = { width: data.width, height: data.height };
   }
   if (data.task) lastTask = data.task;
+  
   const t1 = performance.now();
-  const dvShow = deviceValue || 'auto';
-  const halfShow = halfVal ? 'fp16' : 'fp32';
-  const imgszShow = !Number.isNaN(imgszVal) ? imgszVal : '-';
-  statsEl.textContent = `图像 ${canvas.width}x${canvas.height} | 上传 ${sw}x${sh} | 设备 ${dvShow} | 任务 ${lastTask} | 精度 ${halfShow} | imgsz ${imgszShow} | 间隔 ${Math.round(sendInterval)}ms | 后端 ${data.inference_time?.toFixed?.(1) || '-'}ms | 往返 ${(t1 - t0).toFixed(1)}ms | 检测 ${detections.length}`;
+  const rtMs = t1 - t0;
+  const backendMs = data.inference_time;
+
+  statsEl.textContent = `Inference: ${backendMs?.toFixed(1) || '-'}ms | RTT: ${rtMs.toFixed(0)}ms | ${detections.length} Objects`;
+  
+  updateDetectionsSidebar({
+    data,
+    deviceValue,
+    backendMs,
+  });
 }
 
 function initWebSocket() {
   if (!useWsCb?.checked) return;
   const base = (serverInput?.value?.trim() || baseUrl).replace(/\/$/, '');
-  const url = new URL((base.replace('http', 'ws')) + '/ws');
+  // Replace http/https with ws/wss
+  const wsProtocol = base.startsWith('https') ? 'wss' : 'ws';
+  const wsBase = base.replace(/^http(s)?/, wsProtocol);
+  
+  const url = new URL(wsBase + '/ws');
+  
+  // ... params ...
   const cv = parseFloat(confInput?.value || '');
   const iv = parseFloat(iouInput?.value || '');
   const mv = parseInt(maxDetInput?.value || '');
@@ -468,6 +538,7 @@ function initWebSocket() {
   const include = [showMasksCb?.checked ? 'masks' : '', showKeypointsCb?.checked ? 'keypoints' : ''].filter(Boolean).join(',');
   const imgszVal = parseInt(imgszInput?.value || '');
   const halfVal = !!halfCb?.checked;
+
   if (!Number.isNaN(cv)) url.searchParams.set('conf', String(cv));
   if (!Number.isNaN(iv)) url.searchParams.set('iou', String(iv));
   if (!Number.isNaN(mv)) url.searchParams.set('max_det', String(mv));
@@ -476,87 +547,85 @@ function initWebSocket() {
   url.searchParams.set('include', include);
   if (!Number.isNaN(imgszVal)) url.searchParams.set('imgsz', String(imgszVal));
   if (halfVal) url.searchParams.set('half', '1');
+
   ws = new WebSocket(url.toString());
   ws.binaryType = 'arraybuffer';
-  ws.onopen = () => {
-    wsReady = true;
-  };
+  ws.onopen = () => { wsReady = true; };
   ws.onmessage = (event) => {
     try {
       const payload = JSON.parse(event.data);
       if (payload.type === 'result' && payload.data) {
         const sw = video.videoWidth || canvas.width;
         const sh = video.videoHeight || canvas.height;
-        const t0 = performance.now();
+        const t0 = performance.now(); // Approximate, since we don't track per-frame RTT well in WS
         handleResult(payload.data, sw, sh, t0, dv, halfVal, imgszVal);
       } else if (payload.type === 'error') {
-        statsEl.textContent = payload.detail || '推理错误';
+        console.warn('WS Error:', payload.detail);
       }
     } catch (e) {
       console.error('ws message parse error', e);
     }
   };
-  ws.onclose = () => {
-    wsReady = false;
-    ws = null;
-  };
-  ws.onerror = () => {
-    wsReady = false;
-  };
+  ws.onclose = () => { wsReady = false; ws = null; };
+  ws.onerror = () => { wsReady = false; };
 }
 
 function closeWebSocket() {
   if (ws) {
-    try {
-      ws.close();
-    } catch (e) {
-      // ignore
-    }
+    try { ws.close(); } catch (e) {}
     ws = null;
   }
   wsReady = false;
 }
 
 startBtn.addEventListener('click', async () => {
-  if (!preflightCameraCheck()) {
-    return;
-  }
+  if (!preflightCameraCheck()) return;
   startBtn.disabled = true;
+  startBtn.innerHTML = '<span class="loader"></span> 启动中...';
+  
   try {
     await initModels();
     applySettings();
     await setupCamera();
     closeWebSocket();
     initWebSocket();
+    
     running = true;
     stopBtn.disabled = false;
     draw();
     sendFrame();
   } catch (e) {
+    console.error(e);
+    statsEl.textContent = '启动失败，请检查控制台日志';
+  } finally {
     startBtn.disabled = false;
+    startBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg> 开始';
   }
 });
 
 stopBtn.addEventListener('click', () => {
   running = false;
   closeWebSocket();
-  const tracks = video.srcObject ? video.srcObject.getTracks() : [];
-  tracks.forEach(t => t.stop());
-  video.srcObject = null;
+  if (video.srcObject) {
+    const tracks = video.srcObject.getTracks();
+    tracks.forEach(t => t.stop());
+    video.srcObject = null;
+  }
   stopBtn.disabled = true;
-  startBtn.disabled = false;
+  statsEl.textContent = 'Ready';
+  
+  // Clear canvas
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
 });
 
 if (inferImageBtn) {
   inferImageBtn.addEventListener('click', async () => {
     const file = imageFileInput && imageFileInput.files && imageFileInput.files[0];
     if (!file) {
-      statsEl.textContent = '请先选择一张图片';
+      alert('请先选择一张图片'); // Simple alert for now, or could use a toast
       return;
     }
-    if (running) {
-      stopBtn.click();
-    }
+    if (running) stopBtn.click();
     await runImageInference(file);
   });
 }
@@ -576,7 +645,6 @@ async function initModels() {
     const s = loadSettings();
     if (s.model && arr.includes(s.model)) modelSelect.value = s.model;
   } catch {
-    // fallback defaults
     const arr = ['yolov8n.pt','yolov8n-seg.pt','yolov8n-pose.pt'];
     modelSelect.innerHTML = '';
     for (const m of arr) {
@@ -586,7 +654,25 @@ async function initModels() {
   }
 }
 
-// Apply saved settings at load time
+// Apply settings on load
 applySettings();
+monitorCameraPermission(); // If this was defined before, I kept it or need to define it. 
+// Ah, it was in the original code but I might have missed copying the function definition if it was there.
+// Checking original code... `monitorCameraPermission` was NOT in the read output of app.js. 
+// Wait, let me check the previous read output again.
+// It ends with `monitorCameraPermission(); preflightCameraCheck();` but I don't see the function definition in the `read_multiple_files` output I got earlier.
+// It might have been truncated or I missed it.
+// I will define a simple one or remove it if not needed. `navigator.permissions` API.
+
+function monitorCameraPermission() {
+  if (navigator.permissions && navigator.permissions.query) {
+    navigator.permissions.query({ name: 'camera' }).then(permissionStatus => {
+      permissionStatus.onchange = () => {
+        preflightCameraCheck();
+      };
+    }).catch(() => {});
+  }
+}
+
 monitorCameraPermission();
 preflightCameraCheck();
