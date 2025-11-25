@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>YOLO-Toys - 实时物体识别</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- Header -->
+  <header>
+    <h1>
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="14.31" y1="8" x2="20.05" y2="17.94"/><line x1="9.69" y1="8" x2="21.17" y2="8"/><line x1="7.38" y1="12" x2="13.12" y2="2.06"/><line x1="9.69" y1="16" x2="3.95" y2="6.06"/><line x1="14.31" y1="16" x2="2.83" y2="16"/><line x1="16.62" y1="12" x2="10.88" y2="21.94"/></svg>
+      YOLO-Toys
+    </h1>
+    <div class="control-group">
+      <button id="themeToggle" class="icon-btn" title="切换主题">
+        <!-- Moon Icon (Dark Mode) -->
+        <svg class="icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+        <!-- Sun Icon (Light Mode) -->
+        <svg class="icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+      </button>
+      <button id="toggleSidebar" class="icon-btn" title="切换侧边栏">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main>
+    <div class="stage-container">
+      <div id="emptyState" class="empty-state">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/><line x1="16" y1="5" x2="22" y2="5"/><line x1="19" y1="2" x2="19" y2="8"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+        <p>点击下方“开始”启动摄像头<br>或上传本地图片</p>
+      </div>
+      <canvas id="canvas"></canvas>
+      <video id="video" autoplay playsinline muted style="display:none"></video>
+    </div>
+
+    <aside class="sidebar" id="detectionsSidebar">
+      <div class="sidebar-header">
+        检测概览
+      </div>
+      <div class="sidebar-content">
+        <div id="permissionStatus" class="notice" hidden></div>
+        
+        <div class="stat-group">
+          <div class="stat-row"><span>总检测数</span> <span id="summaryTotal">0</span></div>
+          <div class="stat-row"><span>模型</span> <span id="summaryModel">-</span></div>
+          <div class="stat-row"><span>设备</span> <span id="summaryDevice">-</span></div>
+          <div class="stat-row"><span>延迟</span> <span id="summaryTiming">-</span></div>
+        </div>
+
+        <h3 style="font-size: 14px; margin-bottom: 10px;">类别计数</h3>
+        <div class="class-list" id="classCounts">
+          <!-- Dynamic Content -->
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- Control Bar -->
+  <div class="control-bar">
+    <button id="start" class="primary">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      开始
+    </button>
+    <button id="stop" class="danger" disabled>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+      停止
+    </button>
+    
+    <div style="width: 1px; height: 24px; background: var(--border); margin: 0 8px;"></div>
+
+    <label class="primary-action">
+      <input id="imageFile" type="file" accept="image/*" style="display: none;" />
+      <button id="uploadBtn" onclick="document.getElementById('imageFile').click()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        上传图片
+      </button>
+    </label>
+    <button id="inferImage">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+      推理
+    </button>
+
+    <div class="spacer"></div>
+
+    <div id="stats" class="stats-bar">Ready</div>
+
+    <button id="openSettings">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      设置
+    </button>
+  </div>
+
+  <!-- Settings Panel -->
+  <div class="settings-overlay" id="settingsOverlay">
+    <div class="settings-panel">
+      <div class="settings-header">
+        <h3>配置选项</h3>
+        <button id="closeSettings" class="icon-btn">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="settings-content">
+        
+        <div class="settings-section">
+          <h3>连接设置</h3>
+          <div class="form-group">
+            <label>服务地址</label>
+            <input id="server" type="text" placeholder="http://localhost:8000" />
+          </div>
+          <label class="checkbox-label">
+            <input id="useWs" type="checkbox" checked />
+            使用 WebSocket (推荐)
+          </label>
+        </div>
+
+        <div class="settings-section">
+          <h3>模型设置</h3>
+          <div class="form-grid">
+            <div class="form-group">
+              <label>选择模型</label>
+              <select id="model"></select>
+            </div>
+            <div class="form-group">
+              <label>设备</label>
+              <select id="device">
+                <option value="auto" selected>Auto</option>
+                <option value="cpu">CPU</option>
+                <option value="mps">MPS (Mac)</option>
+                <option value="cuda:0">CUDA:0</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>自定义模型路径</label>
+            <input id="customModel" type="text" placeholder="(可选)" />
+          </div>
+          <label class="checkbox-label">
+            <input id="half" type="checkbox" />
+            启用 FP16 (半精度)
+          </label>
+        </div>
+
+        <div class="settings-section">
+          <h3>推理参数</h3>
+          <div class="form-grid">
+            <div class="form-group">
+              <label>置信度 (Conf)</label>
+              <input id="conf" type="number" min="0.05" max="0.95" step="0.05" value="0.25" />
+            </div>
+            <div class="form-group">
+              <label>IoU 阈值</label>
+              <input id="iou" type="number" min="0.1" max="0.95" step="0.05" value="0.45" />
+            </div>
+            <div class="form-group">
+              <label>最大检测数</label>
+              <input id="maxDet" type="number" min="50" max="1000" step="10" value="300" />
+            </div>
+            <div class="form-group">
+              <label>推理尺寸</label>
+              <input id="imgsz" type="number" min="160" step="32" value="640" placeholder="640" />
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <h3>传输 & 显示</h3>
+          <div class="form-grid">
+            <div class="form-group">
+              <label>发送帧率</label>
+              <select id="fps">
+                <option value="3">3 fps</option>
+                <option value="5" selected>5 fps</option>
+                <option value="10">10 fps</option>
+                <option value="30">30 fps</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>发送宽度</label>
+              <select id="sendSize">
+                <option value="320">320 px</option>
+                <option value="480">480 px</option>
+                <option value="640" selected>640 px</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>JPEG 质量</label>
+              <select id="quality">
+                <option value="0.6">60%</option>
+                <option value="0.8" selected>80%</option>
+                <option value="0.9">90%</option>
+              </select>
+            </div>
+          </div>
+          
+          <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 8px;">
+            <label class="checkbox-label"><input id="showBoxes" type="checkbox" checked /> 显示边框</label>
+            <label class="checkbox-label"><input id="showLabels" type="checkbox" checked /> 显示标签</label>
+            <label class="checkbox-label"><input id="showMasks" type="checkbox" checked /> 显示掩膜</label>
+            <label class="checkbox-label"><input id="showKeypoints" type="checkbox" checked /> 显示关键点</label>
+            <label class="checkbox-label"><input id="showSkeleton" type="checkbox" checked /> 显示骨架</label>
+          </div>
+          
+          <div class="form-group" style="margin-top: 12px;">
+            <label>掩膜透明度</label>
+            <input id="maskAlpha" type="range" min="0.05" max="0.9" step="0.05" value="0.2" />
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

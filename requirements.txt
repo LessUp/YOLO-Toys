@@ -7,3 +7,7 @@ numpy>=1.24.0
 python-multipart>=0.0.6
 aiofiles>=23.0.0
 torch>=2.1.0
+# HuggingFace Transformers 多模型支持
+transformers>=4.35.0
+# 加速推理
+accelerate>=0.24.0
