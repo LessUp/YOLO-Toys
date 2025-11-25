@@ -1,17 +1,39 @@
-# 实时视频流物体识别（FastAPI + YOLOv8 + 原生前端）
+# 🎯 YOLO-Toys - 多模型实时视觉识别系统
+
+> 支持 YOLO、HuggingFace Transformers、多模态模型的实时视频物体识别平台
+
+## ✨ 新功能 (v2.0)
+- 🔄 **多模型动态切换** - YOLO 检测/分割/姿态、DETR、OWL-ViT、BLIP
+- 🤖 **HuggingFace 集成** - 支持开放词汇检测和多模态模型
+- 💬 **多模态功能** - 图像描述生成、视觉问答 (VQA)
+- 🎨 **全新 UI 设计** - 现代化深色/浅色主题
+- 💡 **功能提示** - 鼠标悬浮显示详细说明
+- 🔔 **Toast 通知** - 实时操作反馈
 
 ## 文档导航
 - [详细教学文档（docs/README.md）](docs/README.md)
+- [更新日志](changelog/)
+
+### 快速启动
+```bash
+# 安装依赖
+pip install -r requirements.txt
+
+# 启动服务
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+# 访问 http://localhost:8000
+```
 
 ### 使用 Docker Compose
-```
+```bash
 docker compose up --build -d
 # 停止
 docker compose down --remove-orphans
 ```
 
 ### 使用 Makefile
-```
+```bash
 make install       # 安装运行依赖
 make dev           # 安装开发依赖并安装 pre-commit 钩子
 make lint          # 代码规范检查
@@ -25,29 +47,50 @@ make compose-down  # docker compose down
 
 
 ## 功能
-- **前端**：
-  - 摄像头采集、Canvas 叠加渲染。
-  - 模型选择（检测/分割/姿态），可自定义模型名或权重路径。
-  - 可配置服务地址、发送帧率、上传宽度、JPEG 质量。
-  - 动态调参：置信度、IoU、最大检测数、设备（auto/cpu/mps/cuda）。
-  - 显示开关：框、标签、掩膜、关键点。设置自动持久化到浏览器本地。
-- **后端**：
-  - FastAPI 提供 `/infer`、`/health`、`/models` 接口。
-  - Ultralytics YOLOv8：检测（.pt）、分割（-seg.pt）、姿态（-pose.pt）。
-  - 启动预热（可跳过）、自动选择设备（CUDA/MPS/CPU），支持按请求覆盖推理参数。
+
+### 支持的模型
+| 类别 | 模型 | 说明 |
+|------|------|------|
+| **YOLO 检测** | YOLOv8 n/s/m/l/x | 实时目标检测 |
+| **YOLO 分割** | YOLOv8 n/s/m-seg | 实例分割 |
+| **YOLO 姿态** | YOLOv8 n/s/m-pose | 人体关键点检测 |
+| **DETR** | facebook/detr-resnet-50/101 | Transformer 检测器 |
+| **OWL-ViT** | google/owlvit-base-patch32 | 开放词汇检测 |
+| **BLIP Caption** | Salesforce/blip-image-captioning | 图像描述生成 |
+| **BLIP VQA** | Salesforce/blip-vqa | 视觉问答 |
+
+### 前端功能
+- 📷 摄像头实时采集、Canvas 叠加渲染
+- 🔄 模型类别标签页切换、快速模型选择
+- ⚙️ 可配置服务地址、发送帧率、JPEG 质量
+- 🎛️ 动态调参：置信度、IoU、最大检测数、设备选择
+- 👁️ 显示开关：边框、标签、掩膜、关键点、骨架
+- 🌓 深色/浅色主题切换
+- 💾 设置自动持久化到浏览器本地
+
+### 后端功能
+- 🚀 FastAPI 提供 REST 和 WebSocket 接口
+- 🔌 `/infer` - 统一推理端点
+- 📊 `/models` - 获取可用模型列表
+- 🩺 `/health` - 健康检查
+- 💬 `/caption` - 图像描述生成
+- ❓ `/vqa` - 视觉问答
+- ⚡ 模型缓存、自动设备选择、FP16 加速
 
 ## 目录结构
 ```
-vision/
+YOLO-Toys/
 ├─ app/
-│  ├─ main.py           # FastAPI 入口，挂载静态前端
-│  ├─ inference.py      # YOLOv8 推理逻辑
+│  ├─ main.py           # FastAPI 入口，统一推理接口
+│  ├─ model_manager.py  # 多模型管理器（新增）
+│  ├─ inference.py      # YOLOv8 推理逻辑（兼容）
 │  └─ schemas.py        # Pydantic 返回结构
 ├─ frontend/
-│  ├─ index.html
-│  ├─ style.css
-│  └─ app.js
-├─ requirements.txt
+│  ├─ index.html        # 全新 UI 设计
+│  ├─ style.css         # 现代化样式
+│  └─ app.js            # 增强交互逻辑
+├─ changelog/           # 更新日志
+├─ requirements.txt     # 包含 transformers
 └─ README.md
 ```
 

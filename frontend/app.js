@@ -58,9 +58,21 @@ let lastInferSize = { width: 1, height: 1 }, lastTask = 'detect';
 let ws = null, wsReady = false, currentModel = 'yolov8s.pt', currentCategory = 'yolo_detect';
 let modelCategories = {};
 
+const toastContainer = document.getElementById('toastContainer');
+
 const SETTINGS_KEY = 'yolo_toys_v3';
 const SKELETON = [[0,1],[0,2],[1,3],[2,4],[5,6],[5,7],[7,9],[6,8],[8,10],[5,11],[6,12],[11,12],[11,13],[13,15],[12,14],[14,16]];
 const COLORS = ['#ef4444','#f97316','#f59e0b','#84cc16','#22c55e','#06b6d4','#3b82f6','#6366f1','#a855f7','#ec4899'];
+
+// Toast 通知系统
+function showToast(message, type = 'info', duration = 3000) {
+  if (!toastContainer) return;
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.textContent = message;
+  toastContainer.appendChild(toast);
+  setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, duration);
+}
 
 // Theme
 function setTheme(t) {
@@ -147,6 +159,17 @@ function renderModels() {
   quickModelSelect.innerHTML = '';
   modelList.innerHTML = '';
   
+  // 判断是否应该显示该类别的模型
+  const shouldShowCategory = (cat) => {
+    if (cat === currentCategory) return true;
+    // YOLO 类别相互显示
+    if (currentCategory.startsWith('yolo') && cat.startsWith('yolo') && currentCategory === cat) return true;
+    // 多模态标签页显示所有多模态类别
+    if (currentCategory === 'multimodal' && cat.startsWith('multimodal')) return true;
+    // 精确匹配
+    return cat === currentCategory;
+  };
+  
   Object.entries(modelCategories).forEach(([cat, data]) => {
     const grp = document.createElement('optgroup');
     grp.label = data.name;
@@ -156,15 +179,21 @@ function renderModels() {
       if (m.id === currentModel) opt.selected = true;
       grp.appendChild(opt);
       
-      const item = document.createElement('div');
-      item.className = `model-item${m.id === currentModel ? ' selected' : ''}`;
-      item.dataset.model = m.id;
-      item.innerHTML = `<div class="model-item-name">${m.name}</div><div class="model-item-desc">${m.description || ''}</div>`;
-      item.onclick = () => { currentModel = m.id; renderModels(); updateVars(); };
-      if (cat === currentCategory || (currentCategory.startsWith('yolo') && cat.startsWith('yolo'))) modelList.appendChild(item);
+      if (shouldShowCategory(cat)) {
+        const item = document.createElement('div');
+        item.className = `model-item${m.id === currentModel ? ' selected' : ''}`;
+        item.dataset.model = m.id;
+        item.innerHTML = `<div class="model-item-name">${m.name}</div><div class="model-item-desc">${m.description || ''}</div>${m.speed ? `<div class="model-item-meta"><span>速度: ${m.speed}</span><span>精度: ${m.accuracy || '-'}</span></div>` : ''}`;
+        item.onclick = () => { currentModel = m.id; renderModels(); updateVars(); showToast(`已选择 ${m.name}`, 'info'); };
+        modelList.appendChild(item);
+      }
     });
     quickModelSelect.appendChild(grp);
   });
+  
+  if (!modelList.children.length) {
+    modelList.innerHTML = '<div class="empty-hint">此类别暂无可用模型</div>';
+  }
 }
 
 modelTabs?.querySelectorAll('.tab-btn').forEach(btn => {
@@ -180,12 +209,25 @@ quickModelSelect?.addEventListener('change', () => { currentModel = quickModelSe
 
 // Camera
 async function setupCamera() {
-  const stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 } } });
-  video.srcObject = stream;
-  await new Promise(r => video.onloadedmetadata = r);
-  video.play();
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'environment' } });
+    video.srcObject = stream;
+    await new Promise(r => video.onloadedmetadata = r);
+    video.play();
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    showToast('摄像头启动成功', 'success');
+  } catch (e) {
+    if (e.name === 'NotAllowedError') {
+      showToast('摄像头权限被拒绝', 'error');
+      if (permissionStatus) { permissionStatus.hidden = false; permissionStatus.textContent = '请在浏览器设置中允许摄像头访问'; permissionStatus.className = 'notice error'; }
+    } else if (e.name === 'NotFoundError') {
+      showToast('未找到摄像头设备', 'error');
+    } else {
+      showToast(`摄像头错误: ${e.message}`, 'error');
+    }
+    throw e;
+  }
 }
 
 // Drawing
@@ -260,7 +302,10 @@ async function sendFrame() {
         const res = await fetch(u, { method: 'POST', body: fd });
         if (res.ok) handleResult(await res.json(), t0, p.device);
       }
-    } catch (e) { console.error(e); }
+    } catch (e) { 
+      console.error(e);
+      if (!e.message?.includes('fetch')) showToast('推理请求失败', 'error');
+    }
     busy = false;
     if (running) setTimeout(sendFrame, sendInterval);
   }, 'image/jpeg', parseFloat(qualitySelect?.value || '0.8'));
@@ -297,9 +342,16 @@ function initWS() {
   if (p.device !== 'auto') u.searchParams.set('device', p.device);
   u.searchParams.set('model', p.model); u.searchParams.set('imgsz', p.imgsz);
   ws = new WebSocket(u); ws.binaryType = 'arraybuffer';
-  ws.onopen = () => wsReady = true;
-  ws.onmessage = e => { try { const d = JSON.parse(e.data); if (d.type === 'result') handleResult(d.data, performance.now(), p.device); } catch {} };
-  ws.onclose = ws.onerror = () => { wsReady = false; ws = null; };
+  ws.onopen = () => { wsReady = true; showToast('WebSocket 已连接', 'success'); };
+  ws.onmessage = e => { 
+    try { 
+      const d = JSON.parse(e.data); 
+      if (d.type === 'result') handleResult(d.data, performance.now(), p.device);
+      else if (d.type === 'error') showToast(d.detail || '推理错误', 'error');
+    } catch {} 
+  };
+  ws.onclose = () => { wsReady = false; ws = null; if (running) showToast('WebSocket 连接断开', 'error'); };
+  ws.onerror = () => { wsReady = false; showToast('WebSocket 连接失败', 'error'); };
 }
 function closeWS() { try { ws?.close(); } catch {} ws = null; wsReady = false; }
 
@@ -311,11 +363,23 @@ async function runImageInference(file) {
   statsEl.textContent = '推理中...';
   try {
     const res = await fetch(u, { method: 'POST', body: fd });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     const img = new Image();
-    img.onload = () => { canvas.width = img.width; canvas.height = img.height; ctx.drawImage(img, 0, 0); detections = data.detections || []; lastInferSize = { width: data.width || img.width, height: data.height || img.height }; drawDetections(); emptyState.style.display = 'none'; statsEl.textContent = `完成: ${detections.length} 目标`; updateSidebar(data, p.device, data.inference_time); };
+    img.onload = () => { 
+      canvas.width = img.width; canvas.height = img.height; ctx.drawImage(img, 0, 0); 
+      detections = data.detections || []; 
+      lastInferSize = { width: data.width || img.width, height: data.height || img.height }; 
+      drawDetections(); emptyState.style.display = 'none'; 
+      statsEl.textContent = `完成: ${detections.length} 目标 | ${data.inference_time?.toFixed(0) || '-'}ms`; 
+      updateSidebar(data, p.device, data.inference_time);
+      showToast(`检测到 ${detections.length} 个目标`, 'success');
+    };
     img.src = URL.createObjectURL(file);
-  } catch { statsEl.textContent = '推理失败'; }
+  } catch (e) { 
+    statsEl.textContent = '推理失败'; 
+    showToast(`推理失败: ${e.message}`, 'error');
+  }
 }
 
 // Event Handlers
@@ -325,7 +389,11 @@ startBtn?.addEventListener('click', async () => {
     await loadModels(); applySettings(); await setupCamera();
     closeWS(); initWS(); running = true; stopBtn.disabled = false; emptyState.style.display = 'none';
     draw(); sendFrame();
-  } catch (e) { console.error(e); statsEl.textContent = '启动失败'; }
+  } catch (e) { 
+    console.error(e); 
+    statsEl.textContent = '启动失败'; 
+    showToast(`启动失败: ${e.message || '未知错误'}`, 'error');
+  }
   startBtn.disabled = false; startBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg> 开始摄像头';
 });
 
